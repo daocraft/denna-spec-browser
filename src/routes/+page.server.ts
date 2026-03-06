@@ -35,21 +35,22 @@ export const load: PageServerLoad = async ({ url, cookies }) => {
 	const filePath = url.searchParams.get('file');
 	const leftRef = url.searchParams.get('left');
 	const rightRef = url.searchParams.get('right');
+	const ref = url.searchParams.get('ref'); // single-view version pin
 	const token = cookies.get('github_token');
 
 	if (!owner || !repo || !filePath) {
-		return { owner, repo, filePath: null, leftFile: null, rightFile: null, token: token ?? null };
+		return { owner, repo, filePath: null, leftFile: null, rightFile: null, leftRef, rightRef, ref, token: token ?? null };
 	}
 
 	if (leftRef || rightRef) {
-		// Compare mode: load both refs in parallel.
+		// Compare mode: load both refs in parallel. Single-view ref is ignored.
 		const [leftFile, rightFile] = await Promise.all([
 			loadFileWithSchema(owner, repo, filePath, token, leftRef ?? undefined),
 			loadFileWithSchema(owner, repo, filePath, token, rightRef ?? undefined)
 		]);
-		return { owner, repo, filePath, leftFile, rightFile, token: token ?? null };
+		return { owner, repo, filePath, leftFile, rightFile, leftRef, rightRef, ref: null, token: token ?? null };
 	}
 
-	const leftFile = await loadFileWithSchema(owner, repo, filePath, token);
-	return { owner, repo, filePath, leftFile, rightFile: null, token: token ?? null };
+	const leftFile = await loadFileWithSchema(owner, repo, filePath, token, ref ?? undefined);
+	return { owner, repo, filePath, leftFile, rightFile: null, leftRef: null, rightRef: null, ref, token: token ?? null };
 };

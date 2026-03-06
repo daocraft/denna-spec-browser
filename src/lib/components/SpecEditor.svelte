@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { Plus, X, Loader2, ExternalLink, ChevronDown, ChevronRight, HelpCircle } from 'lucide-svelte';
 	import type { DennaSpec } from '$lib/denna/types.js';
 	import { createSpecPr } from '$lib/github.js';
@@ -18,8 +19,8 @@
 
 	let { spec, token, owner, repo, path, sha, rawText, onCancel, onReady }: Props = $props();
 
-	// Deep clone for editing
-	let draft = $state<DennaSpec>(JSON.parse(JSON.stringify(spec)));
+	// Deep clone for editing — intentionally captures initial spec value only.
+	let draft = $state<DennaSpec>(untrack(() => JSON.parse(JSON.stringify(spec))));
 
 	let submitting = $state(false);
 	let prUrl = $state('');

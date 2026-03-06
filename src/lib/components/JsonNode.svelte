@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { isRate, isAmount, isDuration, isAddressObject } from '$lib/denna/detect.js';
 	import RateField from './fields/RateField.svelte';
 	import AmountField from './fields/AmountField.svelte';
@@ -18,8 +19,8 @@
 
 	let { value, onChange, depth = 0, keyName = '' }: Props = $props();
 
-	// Collapse objects/arrays by default when nested
-	let collapsed = $state(depth > 1);
+	// Collapse objects/arrays by default when nested — intentionally captures initial depth only.
+	let collapsed = $state(untrack(() => depth > 1));
 
 	type NodeType =
 		| 'null'
@@ -134,6 +135,7 @@
 {:else if type === 'boolean'}
 	<button
 		role="switch"
+		aria-label="Toggle value"
 		aria-checked={value as boolean}
 		onclick={() => onChange(!(value as boolean))}
 		class="relative inline-flex h-5 w-9 items-center rounded-full transition-colors {value ? 'bg-primary' : 'bg-muted-foreground/30'}"

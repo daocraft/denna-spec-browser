@@ -20,9 +20,10 @@
 </script>
 
 <div class="space-y-1.5">
-	<label class="text-xs font-medium text-muted-foreground">{label}</label>
+	{#if label}<label for="duration-value" class="text-xs font-medium text-muted-foreground">{label}</label>{/if}
 	<div class="flex gap-2">
 		<input
+			id="duration-value"
 			type="number"
 			value={value.value}
 			min="0"

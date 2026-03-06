@@ -17,13 +17,15 @@
 
 	// Use schema to determine if data is under a `parameters` wrapper.
 	// If no schema is available, fall back to duck-typing the data shape.
-	const raw = spec as Record<string, unknown>;
-	const hasParamsWrapper = domainSchema
-		? schemaHasParametersWrapper(domainSchema)
-		: typeof raw.parameters === 'object' && raw.parameters !== null && !Array.isArray(raw.parameters);
-	const params = hasParamsWrapper
-		? (raw.parameters as Record<string, unknown>)
-		: raw;
+	const raw = $derived(spec as Record<string, unknown>);
+	const hasParamsWrapper = $derived(
+		domainSchema
+			? schemaHasParametersWrapper(domainSchema)
+			: typeof raw.parameters === 'object' && raw.parameters !== null && !Array.isArray(raw.parameters)
+	);
+	const params = $derived(
+		hasParamsWrapper ? (raw.parameters as Record<string, unknown>) : raw
+	);
 
 	let copiedAddress = $state('');
 

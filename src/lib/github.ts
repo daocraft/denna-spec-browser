@@ -21,19 +21,23 @@ function getOctokit(token?: string) {
 export async function discoverSpecFiles(
 	owner: string,
 	repo: string,
-	token?: string
+	token?: string,
+	ref?: string
 ): Promise<SpecFile[]> {
 	const octokit = getOctokit(token);
 
-	// Get default branch
-	const { data: repoData } = await octokit.repos.get({ owner, repo });
-	const defaultBranch = repoData.default_branch;
+	let treeSha: string;
+	if (ref) {
+		treeSha = ref;
+	} else {
+		const { data: repoData } = await octokit.repos.get({ owner, repo });
+		treeSha = repoData.default_branch;
+	}
 
-	// Get full tree recursively
 	const { data: treeData } = await octokit.git.getTree({
 		owner,
 		repo,
-		tree_sha: defaultBranch,
+		tree_sha: treeSha,
 		recursive: '1'
 	});
 

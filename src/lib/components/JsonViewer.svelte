@@ -1,4 +1,5 @@
 <script lang="ts">
+	import { untrack } from 'svelte';
 	import { isRate, isAmount, isDuration, isAddressObject } from '$lib/denna/detect.js';
 	import { formatRate, formatAmount, formatDuration, shortenAddress } from '$lib/denna/render.js';
 	import { getSchemaTypeHint } from '$lib/denna/schema.js';
@@ -15,7 +16,7 @@
 
 	let { value, depth = 0, schema = null, schemaPath = [] }: Props = $props();
 
-	let collapsed = $state(depth > 1);
+	let collapsed = $state(untrack(() => depth > 1));
 	let copied = $state(false);
 
 	type NodeType =

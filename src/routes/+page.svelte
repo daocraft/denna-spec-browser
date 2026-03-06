@@ -5,8 +5,10 @@
 	import SpecPreview from '$lib/components/SpecPreview.svelte';
 	import SpecRaw from '$lib/components/SpecRaw.svelte';
 	import SpecEditor from '$lib/components/SpecEditor.svelte';
+	import { untrack } from 'svelte';
 	import { user } from '$lib/stores/auth.js';
 	import { goto } from '$app/navigation';
+	import { discoverSpecFiles } from '$lib/github.js';
 	import { Eye, Code2, Pencil, GitCompare, X, Loader2, FileJson, ChevronDown, GitPullRequest } from 'lucide-svelte';
 	import type { SpecFile, DennaSpec } from '$lib/denna/types.js';
 	import type { PageData } from './$types';
@@ -15,25 +17,91 @@
 
 	// --- Sidebar state ---
 	let files = $state<SpecFile[]>([]);
-	let sidebarOwner = $state(data.owner ?? '');
-	let sidebarRepo = $state(data.repo ?? '');
+	let filesLoading = $state(false);
+	// Files visible in compare mode = intersection of both refs' file lists
+	let compareFiles = $state<SpecFile[] | null>(null);
+	let compareFilesLoading = $state(false);
+	let sidebarOwner = $state(untrack(() => data.owner ?? ''));
+	let sidebarRepo = $state(untrack(() => data.repo ?? ''));
 
+	// Restore owner/repo from localStorage when the URL has no owner/repo,
+	// and sync the URL so the page is immediately shareable.
+	// File discovery is handled by the separate effect below.
 	$effect(() => {
+		if (sidebarOwner && sidebarRepo) return; // already set from URL
 		const saved = localStorage.getItem('repoState');
 		if (!saved) return;
 		try {
 			const parsed = JSON.parse(saved) as { owner: string; repo: string; files: SpecFile[] };
 			if (!parsed.owner || !parsed.repo) return;
-			if (sidebarOwner && sidebarRepo) {
-				if (parsed.owner === sidebarOwner && parsed.repo === sidebarRepo) {
-					files = parsed.files;
-				}
-			} else {
-				sidebarOwner = parsed.owner;
-				sidebarRepo = parsed.repo;
-				files = parsed.files;
-			}
+			sidebarOwner = parsed.owner;
+			sidebarRepo = parsed.repo;
+			const url = new URL(window.location.href);
+			url.searchParams.set('owner', parsed.owner);
+			url.searchParams.set('repo', parsed.repo);
+			window.history.replaceState({}, '', url);
 		} catch { /* ignore */ }
+	});
+
+	// Discover (or re-discover) spec files whenever owner, repo, or the pinned ref changes.
+	// Tracks the last (owner/repo/ref) combination we fetched for to avoid redundant calls.
+	let lastDiscoveredKey = $state('');
+	$effect(() => {
+		const activeRef = compareMode ? null : (data.ref ?? null);
+		const key = `${sidebarOwner}/${sidebarRepo}@${activeRef ?? 'HEAD'}`;
+		if (!sidebarOwner || !sidebarRepo || filesLoading) return;
+
+		// Cache hit: already have files for this exact combination.
+		if (key === lastDiscoveredKey && files.length > 0) return;
+
+		// For the default ref, try localStorage first.
+		if (!activeRef) {
+			const saved = localStorage.getItem('repoState');
+			if (saved) {
+				try {
+					const parsed = JSON.parse(saved) as { owner: string; repo: string; files: SpecFile[] };
+					if (parsed.owner === sidebarOwner && parsed.repo === sidebarRepo && parsed.files?.length) {
+						files = parsed.files;
+						lastDiscoveredKey = key;
+						return;
+					}
+				} catch { /* ignore */ }
+			}
+		}
+
+		filesLoading = true;
+		discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, activeRef ?? undefined)
+			.then((discovered) => {
+				files = discovered;
+				lastDiscoveredKey = key;
+				if (!activeRef) {
+					localStorage.setItem('repoState', JSON.stringify({ owner: sidebarOwner, repo: sidebarRepo, files: discovered }));
+				}
+			})
+			.catch(() => {})
+			.finally(() => { filesLoading = false; });
+	});
+
+	// When compare mode is active, discover spec files from both refs and
+	// show only the intersection — files that exist in both versions.
+	$effect(() => {
+		const leftRef = data.leftRef;
+		const rightRef = data.rightRef;
+		if (!compareMode || !leftRef || !rightRef || !sidebarOwner || !sidebarRepo) {
+			compareFiles = null;
+			return;
+		}
+		compareFilesLoading = true;
+		Promise.all([
+			discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, leftRef),
+			discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, rightRef)
+		])
+			.then(([leftFiles, rightFiles]) => {
+				const rightPaths = new Set(rightFiles.map((f) => f.path));
+				compareFiles = leftFiles.filter((f) => rightPaths.has(f.path));
+			})
+			.catch(() => { compareFiles = []; })
+			.finally(() => { compareFilesLoading = false; });
 	});
 
 	function handleFiles(newFiles: SpecFile[], newOwner: string, newRepo: string) {
@@ -46,7 +114,12 @@
 
 	const hasRepo = $derived(!!(sidebarOwner && sidebarRepo));
 	const hasFile = $derived(data.filePath !== null && data.leftFile !== null);
-	const compareMode = $derived(data.rightFile !== null);
+	const compareMode = $derived(!!(data.leftRef && data.rightRef));
+
+	// In compare mode, show only files that exist in both refs.
+	// Falls back to the normal file list otherwise.
+	const displayFiles = $derived(compareMode && compareFiles !== null ? compareFiles : files);
+	const isLoadingFiles = $derived(filesLoading || compareFilesLoading);
 
 	// --- View mode ---
 	type ViewMode = 'preview' | 'raw' | 'edit';
@@ -57,21 +130,28 @@
 	let editorOpenConfirm = $state<(() => void) | null>(null);
 	function cancelEdit() { mode = 'preview'; editorOpenConfirm = null; }
 
-	// --- Compare state ---
-	let compareOpen = $state(false);
+	// --- Tags (shared by version selector + compare picker) ---
 	let tags = $state<{ name: string }[]>([]);
 	let tagsLoading = $state(false);
+
+	// Load tags eagerly as soon as a repo is selected.
+	$effect(() => {
+		if (!hasRepo || tags.length > 0 || tagsLoading) return;
+		tagsLoading = true;
+		fetch(`/api/tags?owner=${sidebarOwner}&repo=${sidebarRepo}`)
+			.then((r) => r.json())
+			.then((t) => { tags = t; })
+			.catch(() => { tags = []; })
+			.finally(() => { tagsLoading = false; });
+	});
+
+	// --- Compare state ---
+	let compareOpen = $state(false);
 	let leftTag = $state('');
 	let rightTag = $state('');
 
-	async function openCompare() {
+	function openCompare() {
 		compareOpen = true;
-		if (tags.length > 0 || tagsLoading) return;
-		tagsLoading = true;
-		try {
-			const res = await fetch(`/api/tags?owner=${sidebarOwner}&repo=${sidebarRepo}`);
-			tags = await res.json();
-		} catch { tags = []; } finally { tagsLoading = false; }
 	}
 
 	function applyCompare() {
@@ -87,6 +167,13 @@
 	function exitCompare() {
 		const params = new URLSearchParams({ owner: sidebarOwner, repo: sidebarRepo });
 		if (data.filePath) params.set('file', data.filePath);
+		goto(`/?${params.toString()}`);
+	}
+
+	function switchRef(ref: string) {
+		const params = new URLSearchParams({ owner: sidebarOwner, repo: sidebarRepo });
+		if (ref) params.set('ref', ref);
+		// Drop the selected file — it may not exist at the new ref.
 		goto(`/?${params.toString()}`);
 	}
 
@@ -147,6 +234,29 @@
 			<!-- SIDEBAR -->
 			<aside class="w-64 shrink-0 flex flex-col border-r border-border bg-card overflow-hidden">
 
+				<!-- Version selector (hidden in compare mode) -->
+				{#if !compareMode}
+					<div class="px-3 py-2 border-b border-border shrink-0">
+						<div class="relative">
+							<select
+								value={data.ref ?? ''}
+								onchange={(e) => switchRef((e.target as HTMLSelectElement).value)}
+								class="w-full text-xs font-mono bg-background border border-border rounded px-2 py-1.5 pr-6 appearance-none focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
+							>
+								<option value="">Latest (HEAD)</option>
+								{#if tagsLoading}
+									<option disabled>Loading tags…</option>
+								{:else}
+									{#each tags as tag}
+										<option value={tag.name}>{tag.name}</option>
+									{/each}
+								{/if}
+							</select>
+							<ChevronDown class="w-3 h-3 absolute right-2 top-1/2 -translate-y-1/2 pointer-events-none text-muted-foreground" />
+						</div>
+					</div>
+				{/if}
+
 				<!-- Compare active indicator -->
 				{#if compareMode}
 					<div class="flex items-center justify-between px-3 py-1.5 bg-primary/10 border-b border-primary/20 shrink-0">
@@ -183,9 +293,10 @@
 							{#each [{ label: 'Left', bind: 'left' }, { label: 'Right', bind: 'right' }] as _, i}
 								{@const isLeft = i === 0}
 								<div>
-									<label class="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block mb-0.5">{isLeft ? 'Left' : 'Right'}</label>
+									<label for={isLeft ? 'compare-left-tag' : 'compare-right-tag'} class="text-[10px] text-muted-foreground font-semibold uppercase tracking-wider block mb-0.5">{isLeft ? 'Left' : 'Right'}</label>
 									<div class="relative">
 										<select
+											id={isLeft ? "compare-left-tag" : "compare-right-tag"}
 											value={isLeft ? leftTag : rightTag}
 											onchange={(e) => { if (isLeft) leftTag = (e.target as HTMLSelectElement).value; else rightTag = (e.target as HTMLSelectElement).value; }}
 											class="w-full text-xs font-mono bg-background border border-border rounded px-2 py-1.5 pr-6 appearance-none focus:outline-none focus:ring-1 focus:ring-ring text-foreground"
@@ -211,14 +322,27 @@
 
 				<!-- File tree -->
 				<div class="flex-1 overflow-y-auto">
-					<SpecFileTree
-						{files}
-						owner={sidebarOwner}
-						repo={sidebarRepo}
-						selectedPath={data.filePath}
-						leftRef={compareMode ? (data.leftRef ?? null) : null}
-						rightRef={compareMode ? (data.rightRef ?? null) : null}
-					/>
+					{#if isLoadingFiles}
+						<div class="flex items-center gap-2 px-4 py-4 text-xs text-muted-foreground">
+							<Loader2 class="w-3 h-3 animate-spin shrink-0" />
+							{compareFilesLoading ? 'Finding shared files…' : 'Discovering files…'}
+						</div>
+					{:else if compareMode && compareFiles !== null && compareFiles.length === 0}
+						<div class="px-4 py-6 text-center">
+							<p class="text-xs text-muted-foreground font-medium">No files in common</p>
+							<p class="text-[10px] text-muted-foreground/60 mt-1">These two versions have different file structures</p>
+						</div>
+					{:else}
+						<SpecFileTree
+							files={displayFiles}
+							owner={sidebarOwner}
+							repo={sidebarRepo}
+							selectedPath={data.filePath}
+							ref={compareMode ? null : (data.ref ?? null)}
+							leftRef={compareMode ? (data.leftRef ?? null) : null}
+							rightRef={compareMode ? (data.rightRef ?? null) : null}
+						/>
+					{/if}
 				</div>
 
 				<!-- Compare button -->
@@ -280,7 +404,7 @@
 					<div class="sticky top-0 z-10 flex items-center justify-between gap-3 px-5 py-2.5 border-b border-border bg-background/95 backdrop-blur-sm">
 						<div class="min-w-0">
 							<span class="text-sm font-mono font-bold text-foreground truncate block" style="letter-spacing: -0.01em">{fileName(data.filePath!)}</span>
-							<span class="text-[10px] text-muted-foreground/60 font-mono">{sidebarOwner}/{sidebarRepo}</span>
+							<span class="text-[10px] text-muted-foreground/60 font-mono">{sidebarOwner}/{sidebarRepo}{data.ref ? ` @ ${data.ref}` : ''}</span>
 						</div>
 						<div class="flex items-center gap-2 shrink-0">
 							{#if mode === 'edit'}

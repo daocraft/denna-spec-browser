@@ -7,11 +7,12 @@
 		owner: string;
 		repo: string;
 		selectedPath?: string | null;
+		ref?: string | null;
 		leftRef?: string | null;
 		rightRef?: string | null;
 	}
 
-	let { files, owner, repo, selectedPath = null, leftRef = null, rightRef = null }: Props = $props();
+	let { files, owner, repo, selectedPath = null, ref = null, leftRef = null, rightRef = null }: Props = $props();
 
 	let grouped = $derived(() => {
 		const groups: Record<string, SpecFile[]> = {};
@@ -30,6 +31,7 @@
 
 	function viewUrl(file: SpecFile) {
 		const params = new URLSearchParams({ owner, repo, file: file.path });
+		if (ref) params.set('ref', ref);
 		if (leftRef) params.set('left', leftRef);
 		if (rightRef) params.set('right', rightRef);
 		return `/?${params.toString()}`;

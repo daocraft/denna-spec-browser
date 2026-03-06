@@ -24,9 +24,10 @@
 </script>
 
 <div class="space-y-1.5">
-	<label class="text-xs font-medium text-muted-foreground">{label}</label>
+	{#if label}<label for="address-value" class="text-xs font-medium text-muted-foreground">{label}</label>{/if}
 	<div class="flex gap-2">
 		<input
+			id="address-value"
 			type="text"
 			value={value.value}
 			oninput={handleValueChange}
