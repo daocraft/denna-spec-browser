@@ -1,0 +1,10 @@
+{
+	"buildCommand": "bun run build",
+	"outputDirectory": ".svelte-kit/output",
+	"framework": "sveltekit",
+	"env": {
+		"GITHUB_CLIENT_ID": "@github_client_id",
+		"GITHUB_CLIENT_SECRET": "@github_client_secret",
+		"GITHUB_REDIRECT_URI": "@github_redirect_uri"
+	}
+}
