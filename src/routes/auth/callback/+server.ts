@@ -1,5 +1,5 @@
 import { redirect, error } from '@sveltejs/kit';
-import { GITHUB_CLIENT_ID, GITHUB_CLIENT_SECRET } from '$env/static/private';
+import { env } from '$env/dynamic/private';
 import type { RequestHandler } from './$types';
 
 export const GET: RequestHandler = async ({ url, cookies, request }) => {
@@ -27,8 +27,8 @@ export const GET: RequestHandler = async ({ url, cookies, request }) => {
 			Accept: 'application/json'
 		},
 		body: JSON.stringify({
-			client_id: GITHUB_CLIENT_ID,
-			client_secret: GITHUB_CLIENT_SECRET,
+			client_id: env.GITHUB_CLIENT_ID ?? '',
+			client_secret: env.GITHUB_CLIENT_SECRET ?? '',
 			code,
 			redirect_uri: redirectUri
 		})
