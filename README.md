@@ -1,42 +1,62 @@
-# sv
+# Denna Spec Browser
 
-Everything you need to build a Svelte project, powered by [`sv`](https://github.com/sveltejs/cli).
+A web-based IDE for browsing, comparing, and editing [`.denna-spec.json`](https://spec.denna.io) files stored in GitHub repositories.
 
-## Creating a project
+Live at [browser.spec.denna.io](https://browser.spec.denna.io).
 
-If you're seeing this, you've probably already done this step. Congrats!
+## Features
+
+- **Repo discovery** — enter any GitHub repo URL and instantly find all `.denna-spec.json` files
+- **Rich preview** — human-readable rendering of spec metadata, allocations, rates, addresses, and other canonical Denna types
+- **Raw view** — syntax-highlighted JSON
+- **Edit & PR** — edit spec fields in a structured form and submit a pull request directly from the browser (requires GitHub sign-in)
+- **Version compare** — select any two release tags to view the same file side by side
+- **IDE-style layout** — file explorer sidebar with a persistent viewer panel; no page reloads when switching files
+- **Dark / light theme** — persisted across sessions
+
+## Stack
+
+| Concern | Choice |
+|---|---|
+| Framework | SvelteKit + Svelte 5 |
+| Language | TypeScript |
+| Styling | Tailwind CSS v4 |
+| GitHub API | `@octokit/rest` |
+| Auth | GitHub OAuth (httpOnly cookie) |
+| Deployment | Vercel |
+| Releases | semantic-release |
+
+## Getting started
 
 ```sh
-# create a new project
-npx sv create my-app
+bun install
+bun dev
 ```
 
-To recreate this project with the same configuration:
+Open [http://localhost:5173](http://localhost:5173).
 
-```sh
-# recreate this project
-bun x sv@0.12.4 create --template minimal --types ts --install bun .
+## Environment variables
+
+Create a `.env` file at the project root:
+
+```env
+GITHUB_CLIENT_ID=...
+GITHUB_CLIENT_SECRET=...
 ```
 
-## Developing
-
-Once you've created a project and installed dependencies with `npm install` (or `pnpm install` or `yarn`), start a development server:
-
-```sh
-npm run dev
-
-# or start the server and open the app in a new browser tab
-npm run dev -- --open
-```
+Register an OAuth App in your GitHub settings with the callback URL set to `http://localhost:5173/auth/callback` for local dev and `https://browser.spec.denna.io/auth/callback` for production. Both can be registered in the same OAuth App as separate callback URLs.
 
 ## Building
 
-To create a production version of your app:
-
 ```sh
-npm run build
+bun run build
+bun preview
 ```
 
-You can preview the production build with `npm run preview`.
+## Releases
 
-> To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+Releases are automated via [semantic-release](https://semantic-release.io) on every push to `main`. Use [conventional commits](https://www.conventionalcommits.org):
+
+- `fix: ...` → patch
+- `feat: ...` → minor
+- `feat!: ...` / `BREAKING CHANGE:` → major
