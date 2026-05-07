@@ -70,7 +70,7 @@
 		}
 
 		filesLoading = true;
-		discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, activeRef ?? undefined)
+		discoverSpecFiles(sidebarOwner, sidebarRepo, data.token ?? undefined, activeRef ?? undefined)
 			.then((discovered) => {
 				files = discovered;
 				lastDiscoveredKey = key;
@@ -93,8 +93,8 @@
 		}
 		compareFilesLoading = true;
 		Promise.all([
-			discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, leftRef),
-			discoverSpecFiles(sidebarOwner, sidebarRepo, undefined, rightRef)
+			discoverSpecFiles(sidebarOwner, sidebarRepo, data.token ?? undefined, leftRef),
+			discoverSpecFiles(sidebarOwner, sidebarRepo, data.token ?? undefined, rightRef)
 		])
 			.then(([leftFiles, rightFiles]) => {
 				const rightPaths = new Set(rightFiles.map((f) => f.path));
@@ -211,7 +211,7 @@
 			{:else}
 				<!-- Repo search in header -->
 				<div class="max-w-md w-full">
-					<RepoSearch onFiles={handleFiles} compact />
+					<RepoSearch onFiles={handleFiles} token={data.token ?? undefined} compact />
 				</div>
 			{/if}
 		{/snippet}
