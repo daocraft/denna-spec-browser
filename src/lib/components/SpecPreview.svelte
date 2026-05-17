@@ -105,13 +105,22 @@
 			<h2 class="text-sm font-semibold text-muted-foreground uppercase tracking-wider mb-3">Chains</h2>
 			<div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
 				{#each chains as chain}
-					{@const name = (chain.name ?? chain.id ?? 'Unknown') as string}
-					{@const chainId = chain.id as string | undefined}
+					{@const name = (chain.name ?? chain.chain ?? chain.id ?? 'Unknown') as string}
+					{@const chainId = (chain.chainId ?? chain.id) as string | number | undefined}
 					{@const features = chain.features as Record<string, boolean> | undefined}
+					{@const validators = Array.isArray(chain.validators)
+						? (chain.validators as Record<string, unknown>[])
+						: []}
+					{@const rewards = chain.rewards as Record<string, unknown> | undefined}
+					{@const deployBlock = typeof chain.deployBlock === 'number' ? chain.deployBlock : undefined}
+					{@const rpcUrl = typeof chain.rpcUrl === 'string' ? chain.rpcUrl : undefined}
 					{@const hue = chainHue(name)}
+					{@const RESERVED_KEYS = new Set([
+						'id', 'name', 'chain', 'chainId', 'enabled', 'features',
+						'validators', 'rewards', 'deployBlock', 'rpcUrl', 'proxyAddress'
+					])}
 					{@const addrFields = Object.entries(chain).filter(
-						([k, v]) =>
-							k !== 'id' && k !== 'name' && k !== 'features' && k !== 'chainId' && k !== 'enabled' && isAddressObject(v)
+						([k, v]) => !RESERVED_KEYS.has(k) && isAddressObject(v)
 					)}
 					<div
 						class="border border-border rounded-lg p-4 bg-card overflow-hidden relative"
@@ -121,8 +130,8 @@
 						<div class="flex items-center justify-between mb-2 gap-2">
 							<div class="flex items-baseline gap-2 min-w-0">
 								<span class="font-semibold text-sm text-foreground truncate">{name}</span>
-								{#if chainId && chainId !== name}
-									<span class="text-[10px] font-mono text-muted-foreground/50 shrink-0">{chainId}</span>
+								{#if chainId !== undefined && String(chainId) !== name}
+									<span class="text-[10px] font-mono text-muted-foreground/50 shrink-0">id {chainId}</span>
 								{/if}
 							</div>
 							{#if chain.enabled !== undefined}
@@ -133,6 +142,20 @@
 								</span>
 							{/if}
 						</div>
+
+						<!-- Deploy block + RPC -->
+						{#if deployBlock !== undefined}
+							<div class="flex items-center gap-2 mt-1.5">
+								<span class="text-[10px] font-mono text-muted-foreground/60 w-20 shrink-0">deployBlock</span>
+								<span class="text-xs font-mono text-muted-foreground">{deployBlock}</span>
+							</div>
+						{/if}
+						{#if rpcUrl}
+							<div class="flex items-center gap-2 mt-1.5">
+								<span class="text-[10px] font-mono text-muted-foreground/60 w-20 shrink-0">rpcUrl</span>
+								<span class="text-xs font-mono text-muted-foreground truncate" title={rpcUrl}>{rpcUrl}</span>
+							</div>
+						{/if}
 
 						<!-- Address fields (new format: address objects) -->
 						{#each addrFields as [key, addrObj]}
@@ -170,6 +193,62 @@
 										<Copy class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
 									{/if}
 								</button>
+							</div>
+						{/if}
+
+						<!-- Validators -->
+						{#if validators.length > 0}
+							<div class="mt-3 pt-3 border-t border-border">
+								<div class="text-[10px] font-mono text-muted-foreground/60 mb-1.5">validators ({validators.length})</div>
+								<div class="space-y-1">
+									{#each validators as v}
+										{@const vAddrObj = v.address}
+										{@const vAddr = isAddressObject(vAddrObj)
+											? (vAddrObj as { value: string; format: string }).value
+											: (typeof vAddrObj === 'string' ? vAddrObj : '')}
+										{@const vName = (v.name as string | undefined) ?? vAddr}
+										{@const commission = v.commissionBps as number | undefined}
+										<div class="flex items-center justify-between gap-2">
+											<span class="text-xs text-foreground truncate">{vName}</span>
+											<div class="flex items-center gap-2 shrink-0">
+												{#if commission !== undefined}
+													<span class="text-[10px] text-muted-foreground/70">{(commission / 100).toFixed(2)}%</span>
+												{/if}
+												{#if vAddr}
+													<button
+														onclick={() => copyAddress(vAddr)}
+														class="flex items-center gap-1 text-xs font-mono text-muted-foreground hover:text-foreground transition-colors group"
+														title={vAddr}
+													>
+														<span>{shortenAddress(vAddr)}</span>
+														{#if copiedAddress === vAddr}
+															<Check class="w-3 h-3 text-badge-success" />
+														{:else}
+															<Copy class="w-3 h-3 opacity-0 group-hover:opacity-100 transition-opacity" />
+														{/if}
+													</button>
+												{/if}
+											</div>
+										</div>
+									{/each}
+								</div>
+							</div>
+						{/if}
+
+						<!-- Rewards -->
+						{#if rewards && Object.keys(rewards).length > 0}
+							<div class="mt-3 pt-3 border-t border-border">
+								<div class="text-[10px] font-mono text-muted-foreground/60 mb-1.5">rewards</div>
+								<div class="space-y-1">
+									{#each Object.entries(rewards) as [rk, rv]}
+										<div class="flex items-center justify-between gap-2">
+											<span class="text-[10px] font-mono text-muted-foreground/60">{rk}</span>
+											<span class="text-xs font-mono text-muted-foreground truncate" title={String(rv)}>
+												{typeof rv === 'string' || typeof rv === 'number' || typeof rv === 'boolean' ? String(rv) : JSON.stringify(rv)}
+											</span>
+										</div>
+									{/each}
+								</div>
 							</div>
 						{/if}
 

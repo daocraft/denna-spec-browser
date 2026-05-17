@@ -39,13 +39,24 @@ export interface AllocationEntry {
 	notes?: string;
 }
 
+export interface ValidatorEntry {
+	address?: SpecAddress | string;
+	name?: string;
+	commissionBps?: number;
+}
+
 export interface ChainConfig {
 	name?: string;
+	chain?: string;
 	chainId?: number | string;
+	deployBlock?: number;
+	rpcUrl?: string;
 	enabled?: boolean;
 	proxyAddress?: string;
 	features?: Record<string, boolean>;
 	allocations?: AllocationEntry[];
+	validators?: ValidatorEntry[];
+	rewards?: Record<string, unknown>;
 }
 
 export interface CalculationModule {
